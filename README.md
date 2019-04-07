@@ -1,3 +1,3 @@
 # ekombi
 polyrhythmic sequencer/sampler for monome norns
-![](ekombidocs.png)
+![](ekombi-docs.png)
