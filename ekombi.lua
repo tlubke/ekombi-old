@@ -189,23 +189,6 @@ function connect_midi()
   end
 end
 
-local mute = {}
-function r_mute(track,x)
-  if x == 1 then
-    print("track "..track.." muted")
-  else
-    print("track "..track.." unmuted")
-  end
-  for i=1,4 do
-    if params:get(i.."_mute") == 1 then
-      mute[i] = 1
-    else
-      mute[i] = 0
-    end
-  end
-  tab.print(mute)
-end
-
 local function all_notes_off(channel)
   for i = 1, #midi_notes_on[channel] do
     midi_out_device[channel]:note_off(midi_notes_on[i])
