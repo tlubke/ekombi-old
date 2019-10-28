@@ -178,7 +178,6 @@ function init()
   end
 
   connect_midi()
-  r_mute("1-4",0)
   gridredraw()
   redraw()
 end
