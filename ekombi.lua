@@ -122,6 +122,11 @@ for i=1,8 do
   end
 end
 
+-- for seeing stored presets
+local preview = {}
+
+
+
 ----------------
 -- initilization
 ----------------
@@ -177,6 +182,14 @@ function init()
     redraw()
   end
 
+  -- displays saved presets for peak.time seconds
+  peak = metro.init()
+  peak.time = 2
+  peak.count = 1
+  peak.event = function(p)
+    preview = {}
+    redraw()
+  end
   connect_midi()
   gridredraw()
   redraw()
@@ -317,6 +330,8 @@ function enc(n,d)
   if n == 2 then
     if mode == 0 then
       pattern_select = util.clamp(pattern_select + d, 1, 16)
+      preview_pattern()
+      peak:start()
       print("pattern:"..pattern_select)
     else
       sub_select = (sub_select + d) % (length_select)
@@ -459,22 +474,30 @@ end
 ---------------------------
 
 function redraw()
+  local display
+
   screen.clear()
   screen.aa(0)
 
-  screen.level(15)
   -- grid pattern preset display
+  if #preview > 0 then
+    display = preview
+    screen.level(6)
+  else
+    display = track
+    screen.level(15)
+  end
   for i=1, 8 do
-    for n=1, #(track[i]) do
-      if track[i][#(track[i])][n] == 1 then
+    for n=1, #(display[i]) do
+      if display[i][#(display[i])][n] == 1 then
         if mode == 1 and cursor[1] == i and cursor[3] == n and blink % 3 == 0 then
           -- pass                   blinking cursor to show selection in edit mode
         else
           screen.rect((n-1)*7, 1 + i*7, 6, 6)
         end
         screen.fill()
-        screen.move(#(track[i])*7, i*7 + 7)
-        screen.text(#(track[i]))
+        screen.move(#(display[i])*7, i*7 + 7)
+        screen.text(#(display[i]))
       else
         if mode == 1 and cursor[1] == i and cursor[3] == n and blink % 3 == 0 then
           -- pass
@@ -482,17 +505,17 @@ function redraw()
           screen.rect(1 + (n-1)*7, 2 + i*7, 5, 5)
         end
         screen.stroke()
-        screen.move(#(track[i])*7, 7 + i*7)
-        screen.text(#(track[i]))
+        screen.move(#(display[i])*7, 7 + i*7)
+        screen.text(#(display[i]))
       end
     end
   end
 
   -- param display
+  screen.level(15)
   screen.move(0,5)
   screen.text("bpm:"..params:get("bpm"))
   screen.move(64,5)
-  screen.level(15)
   screen.text_center("pattern:"..pattern_select)
 
   -- pause/play icon
@@ -575,11 +598,26 @@ end
 ----------------------
 
 function save_pattern()
-  tab.save(track, data_dir .. "ekombi/pattern-" .. pattern_select .. ".data")
+  tab.save(track, norns.state.data .. "pattern-" .. pattern_select .. ".data")
   print("SAVE COMPLETE")
 end
 
 function load_pattern()
-  track = tab.load(data_dir .. "ekombi/pattern-".. pattern_select .. ".data")
-  print("LOAD COMPLETE")
+  local temp = tab.load(norns.state.data .. "pattern-".. pattern_select .. ".data")
+  if temp then
+    track = temp
+    print("LOAD COMPLETE")
+  else
+    print("LOAD FAILED: pattern doesn't exist")
+  end
+end
+
+function preview_pattern()
+  local temp = tab.load(norns.state.data .. "pattern-".. pattern_select .. ".data")
+  if temp then
+    preview = temp
+    print("preview exists")
+  else
+    preview = {}
+  end
 end
