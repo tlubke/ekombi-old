@@ -66,14 +66,12 @@ clk_midi.event = clk.process_midi
 ------------
 -- variables
 ------------
-
-
+local mode = "play"
 
 -- clocking variables
 local position = 0
 local q_position = 0
 local counter = nil
-
 local running = false
 
 -- midi variables
@@ -82,12 +80,9 @@ midi_out_channel = {1, 1, 1, 1}
 midi_out_note = {64, 64, 64, 64}
 midi_notes_on = {{},{},{},{}}
 
-
 -- pattern variables
 local pattern_select = 1
-
--- display variables
-local pattern_display = "default"
+local pattern_current = "default"
 
 -- grid variables
 -- for holding one gridkey and pressing another further right
@@ -106,6 +101,12 @@ end
 
 -- 4, two-track channels (A is even rows, TrackB is odd rows)
 local track = {}
+-- for seeing stored presets
+local preview = {}
+-- build up changes to be pushed to track[]
+local buffer = {}
+
+-- initialize track[]
 for i=1,8 do
   if i % 2 == 1 then
     track[i] = {}
@@ -122,17 +123,11 @@ for i=1,8 do
   end
 end
 
--- for seeing stored presets
-local preview = {}
-
 
 
 ----------------
 -- initilization
 ----------------
-
-
-
 function init()
 
   -- parameters
@@ -182,16 +177,16 @@ function init()
     redraw()
   end
 
-  -- displays saved presets for peak.time seconds
-  peak = metro.init()
-  peak.time = 2
-  peak.count = 1
-  peak.event = function(p)
+  -- displays saved presets for peek.time seconds
+  peek = metro.init()
+  peek.time = 2
+  peek.count = 1
+  peek.event = function(p)
     preview = {}
     redraw()
   end
   connect_midi()
-  gridredraw()
+  redraw_grid()
   redraw()
 end
 
@@ -202,75 +197,75 @@ function connect_midi()
 end
 
 local function all_notes_off(channel)
-  for i = 1, #midi_notes_on[channel] do
+  for i = 1, tab.count(midi_notes_on[channel]) do
     midi_out_device[channel]:note_off(midi_notes_on[i])
   end
   midi_notes_on[channel] = {}
 end
-
-local mode = 0
 
 
 
 -------------------------
 -- grid control functions
 -------------------------
-
-
-
 function g.key(x, y, z)
-  -- sending data to two separate functions
+  if x ~= 16 and y % 2 ~= 1 then
+    mode = "edit"
+    buffer = deepcopy(track)
+    blinker:start()
+  end
+
+  -- sends data to two separate functions
   gridkeyhold(x,y,z)
   gridkey(x,y,z)
-  print(x,y,z)
+  -- print(x,y,z)
 end
 
 function gridkey(x,y,z)
+  local count = 0
+
   if z == 1 then
-    cnt = #(track[y])
+    count = tab.count(buffer[y])
 
     -- error control
-    if cnt == 0 or cnt == nil then
+    if count == 0 or count == nil then
       if x > 1 then
         return
       elseif x == 1 then
-        track[y] = {}
-        track[y][x] = {}
-        track[y][x][x] = 1
-        gridredraw()
+        buffer[y] = {}
+        buffer[y][x] = {}
+        buffer[y][x][x] = 1
+        redraw_grid()
       end
       return
 
     else
-      -- track-B un-reset-able
+      -- mute track-A
       if x == 16 and y % 2 == 1 then
-        track[y] = {}
-        track[y][1] = {}
-        track[y][1][1] = 0
+        -- mute track[y] = {}
         return
       end
 
       -- note toggle on/off
-      if x > cnt then
+      if x > count then
         return
       else
-        if track[y][cnt][x] == 1 then
-          track[y][cnt][x] = 0
+        if buffer[y][count][x] == 1 then
+          buffer[y][count][x] = 0
         else
-          track[y][cnt][x] = 1
+          buffer[y][count][x] = 1
         end
       end
 
       -- automatic clock startup
       if running == false then
-        clk:start()
-        running = true
+        restart_clock()
       end
 
     end
   end
   redraw()
-  gridredraw()
+  redraw_grid()
 end
 
 
@@ -287,18 +282,18 @@ function gridkeyhold(x, y, z)
     second[y] = x
   elseif z == 0 then
     if y <= 8 and g_held[y] == 1 and g_heldMax[y] == 2 then
-      track[y] = {}
+      buffer[y] = {}
       for i = 1, second[y] do
-        track[y][i] = {}
+        buffer[y][i] = {}
         for n=1, i do
-          track[y][i][n] = 1
+          buffer[y][i][n] = 1
         end
       end
     end
   end
 
   redraw()
-  gridredraw()
+  redraw_grid()
 end
 
 
@@ -306,55 +301,52 @@ end
 ---------------------------
 -- norns control functions
 ---------------------------
-
-local track_select = 0 -- 0 indexed, then +1'd later
-local sub_select = 0
--- length_select is 1 indexed because it is modified in two different places
--- in two different ways, one uses the table counting method which itself counts in 1-index
+local row_select = 1 -- 1-indexed, then -1'd later
+local sub_select = 1
 local length_select = 1 -- no track-lengths of 0,
-local cursor = {track_select+1,length_select,sub_select+1}
+local cursor = {row_select, length_select, sub_select}
 
 function enc(n,d)
   if n == 1 then
-    if mode == 0 then
+    if mode == "play" then
       params:delta("bpm",d)
-    else
-      track_select = (track_select + d) % 8
-      length_select = #(track[track_select+1])
-      print("track "..track_select+1)
+    elseif mode == "edit" then
+      row_select = (row_select-1 + d) % 8
+      length_select = tab.count(buffer[row_select])
+      print("track "..row_select)
       sub_select = 0
-      cursor = {track_select+1,length_select,sub_select+1}
+      cursor = {row_select, length_select, sub_select}
     end
   end
 
   if n == 2 then
-    if mode == 0 then
+    if mode == "play" then
       pattern_select = util.clamp(pattern_select + d, 1, 16)
       preview_pattern()
-      peak:start()
+      peek:start()
       print("pattern:"..pattern_select)
-    else
-      sub_select = (sub_select + d) % (length_select)
-      print("sub "..sub_select+1)
-      cursor = {track_select+1,length_select,sub_select+1}
+    elseif mode == "edit" then
+      sub_select = (sub_select-1 + d) % (length_select)
+      print("sub "..sub_select)
+      cursor = {row_select, length_select, sub_select}
     end
   end
 
   if n == 3 then
-    if mode == 0 then
+    if mode == "play" then
       for i=1, 4 do
         params:delta(i.."_filter_cutoff", d)
       end
-    else
+    elseif mode == "edit" then
       length_select = ((length_select + d) % 16)
       if length_select == 0 then length_select = 16 end -- I really didn't want to do this.
       print("length "..length_select)
-      cursor = {track_select+1,length_select,sub_select+1}
-      track[track_select+1] = {}
+      cursor = {row_select, length_select, sub_select}
+      buffer[row_select] = {}
       for i = 1, length_select do
-        track[track_select+1][i] = {}
+        buffer[row_select][i] = {}
         for j=1, i do
-          track[track_select+1][i][j] = 1
+          buffer[row_select][i][j] = 1
         end
       end
     end
@@ -363,10 +355,22 @@ function enc(n,d)
   redraw()
 end
 
+function discard_changes()
+  print("buffer discarded")
+  buffer = {}
+end
+
+function apply_changes()
+  print("buffer applied")
+  track = buffer
+  buffer = {}
+end
+
 function key(n,z)
 
   if z == 1 then
 
+    -- enc-1 only functions when held
     if n == 1 then
       save_pattern()
     end
@@ -380,43 +384,61 @@ function key(n,z)
     if n == 2 then
       if key_held - util.time() < -0.333 then -- hold for a third of a second
         load_pattern()
-        pattern_display = pattern_select
+        pattern_current = pattern_select
+      else
+        discard_changes()
+        mode = "play"
+        blinker:stop()
       end
     end
 
     if n == 3 then
       if key_held - util.time() < -0.333 then -- hold for a third of a second
-        mode = (mode + 1) % 2
-        print("mode "..mode)
-        blinker:start()
-      else
-        if mode == 0 then
-          blinker:stop()
-          if running then
-            clk:stop()
-            running = false
-            for i=1, 4 do
-              all_notes_off(i)
-            end
-          else
-            position = 0
-            clk:start()
-            running = true
-          end
+        if mode == "play" then
+          buffer = deepcopy(track)
+          mode = "edit"
+          blinker:start()
         else
-          track[track_select+1][length_select][sub_select+1] = (track[track_select+1][length_select][sub_select+1] + 1) % 2
+          apply_changes()
+          mode = "play"
+          blinker:stop()
+        end
+        print("mode "..mode)
+      else
+        if mode == "play" then
+          if running then
+            stop_clock()
+          else
+            reset_clock()
+          end
+        elseif mode == "edit" then
+          buffer[row_select][length_select][sub_select] = (buffer[row_select][length_select][sub_select] + 1) % 2
         end
       end
     end
   end
 
-  gridredraw()
+  redraw_grid()
   redraw()
 end
+
+function stop_clock()
+  clk:stop()
+  running = false
+  for i=1, 4 do
+    all_notes_off(i)
+  end
+end
+
+function reset_clock()
+  position = 0
+  clk:start()
+  running = true
+end
+
 ------------------
 -- active functions
 -------------------
-
 --[[
     this is the heart of polyrhythm generating, each track is checked to see which note divisions are on or off,
     first, the B track is checked (the 'quarter' note, before the tuplet division) then if the note is on, we check
@@ -424,36 +446,38 @@ end
     The complicated divisons and multiplations of each of the track sets and subsets is to find the exact position value,
     that when / by that value returns n-1, the track triggers.
 ]]--
-
 function step()
   q_position = q_position + 1
-  fast_gridredraw()
+  fast_redraw_grid()
 end
 
 function tick()
-  local ppq = clk.steps_per_beat * clk.ticks_per_step
-  position = (position + 1) % ppq
+  local count = 0
   local pending = {}
+  local ppq = clk.steps_per_beat * clk.ticks_per_step
+
+  position = (position + 1) % ppq
+
   for i=2, 8, 2 do
-    cnt = #(track[i])
-    if cnt == 0 or cnt == nil then
+    count = tab.count(track[i])
+    if count == 0 or count == nil then
       return
     else
-      if track[i][cnt][(q_position % cnt)+1] == 1 then
+      if track[i][count][(q_position % count)+1] == 1 then
         table.insert(pending,i-1)
       end
     end
   end
 
-  if #(pending) > 0 then
-    for i=1, #(pending) do
-      cnt = #(track[pending[i]])
-      if cnt == 0 or cnt == nil then
+  if tab.count(pending) > 0 then
+    for i=1, tab.count(pending) do
+      count = tab.count(track[pending[i]])
+      if count == 0 or count == nil then
         return
       else
-        for n=1, cnt do
-          if position / ( ppq // (#(track[pending[i]][cnt]))) == n-1 then
-            if track[pending[i]][cnt][n] == 1 then
+        for n=1, count do
+          if position / ( ppq // (tab.count(track[pending[i]][count]))) == n-1 then
+            if track[pending[i]][count][n] == 1 then
               t = (pending[i]//2) + 1
               engine.trig(t - 1) -- samples are 0-3
               all_notes_off(t)
@@ -465,6 +489,7 @@ function tick()
       end
     end
   end
+
 end
 
 
@@ -474,39 +499,47 @@ end
 ---------------------------
 
 function redraw()
-  local display
+  local display = {}
 
   screen.clear()
   screen.aa(0)
 
-  -- grid pattern preset display
-  if #preview > 0 then
-    display = preview
+  -- decide which pattern to display
+  if tab.count(preview) > 0 then
     screen.level(6)
+    -- previously saved patterns
+    display = preview
   else
-    display = track
     screen.level(15)
+    if mode == "play" then
+      -- the currently playing pattern
+      display = track
+    elseif mode == "edit" then
+      -- the currently editing pattern
+      display = buffer
+    end
   end
+
   for i=1, 8 do
-    for n=1, #(display[i]) do
-      if display[i][#(display[i])][n] == 1 then
-        if mode == 1 and cursor[1] == i and cursor[3] == n and blink % 3 == 0 then
-          -- pass                   blinking cursor to show selection in edit mode
+    for n=1, tab.count(display[i]) do
+      if display[i][tab.count(display[i])][n] == 1 then
+        if mode == "edit" and cursor[1] == i and cursor[3] == n and blink % 3 == 0 then
+          -- pass
         else
           screen.rect((n-1)*7, 1 + i*7, 6, 6)
         end
         screen.fill()
-        screen.move(#(display[i])*7, i*7 + 7)
-        screen.text(#(display[i]))
+        screen.move(tab.count(display[i])*7, i*7 + 7)
+        screen.text(tab.count(display[i]))
       else
-        if mode == 1 and cursor[1] == i and cursor[3] == n and blink % 3 == 0 then
+        if mode == "edit" and cursor[1] == i and cursor[3] == n and blink % 3 == 0 then
           -- pass
         else
           screen.rect(1 + (n-1)*7, 2 + i*7, 5, 5)
         end
         screen.stroke()
-        screen.move(#(display[i])*7, 7 + i*7)
-        screen.text(#(display[i]))
+        screen.move(tab.count(display[i])*7, 7 + i*7)
+        screen.text(tab.count(display[i]))
       end
     end
   end
@@ -533,34 +566,43 @@ function redraw()
   screen.level(1)
   -- currently selected pattern
   screen.move(128,5)
-  screen.text_right(pattern_display)
+  screen.text_right(pattern_current)
 
   screen.update()
 end
 
-function gridredraw()
+function redraw_grid()
+  local count = 0
+  local display = {}
+
   g:all(0)
+
+  if mode == "play" then
+    display = track
+  elseif mode == "edit" then
+    display = buffer
+  end
 
   -- draw channels with sub divisions on/off
   for i=1, 8 do
-    for n=1, #(track[i]) do
-      ct = #(track[i])
-      if ct == 0 or nil then return
+    for n=1, tab.count(display[i]) do
+      count = tab.count(display[i])
+      if count == 0 or count == nil then return
       else
         if i % 2 == 1 then
-          if track[i][ct][n] == 1 then
+          if display[i][count][n] == 1 then
             g:led(n, i, 12)
           else
             g:led(n, i, 4)
           end
 
         elseif i % 2 == 0 then
-          if track[i][ct][n] == 1 then
+          if display[i][count][n] == 1 then
             g:led(n, i, 8)
           else
             g:led(n, i, 2)
           end
-          g:led((q_position % ct) + 1, i, 15)
+          g:led((q_position % count) + 1, i, 15)
         end
       end
     end
@@ -569,20 +611,28 @@ function gridredraw()
   g:refresh()
 end
 
-function fast_gridredraw()
+function fast_redraw_grid()
+  local count = 0
+  local display = {}
+
+  if mode == "play" then
+    display = track
+  elseif mode == "edit" then
+    display = buffer
+  end
 
   for i=1, 8 do
-    for n=1, #(track[i]) do
-      ct = #(track[i])
-      if ct == 0 or nil then return
+    for n=1, tab.count(display[i]) do
+      count = tab.count(display[i])
+      if count == 0 or nil then return
       else
         if i % 2 == 0 then
-          if track[i][ct][n] == 1 then
+          if display[i][count][n] == 1 then
             g:led(n, i, 8)
           else
             g:led(n, i, 2)
           end
-          g:led((q_position % ct) + 1, i, 15)
+          g:led((q_position % count) + 1, i, 15)
         end
       end
     end
@@ -596,7 +646,6 @@ end
 ------------------
 -- save/load functions
 ----------------------
-
 function save_pattern()
   tab.save(track, norns.state.data .. "pattern-" .. pattern_select .. ".data")
   print("SAVE COMPLETE")
@@ -620,4 +669,20 @@ function preview_pattern()
   else
     preview = {}
   end
+end
+
+function deepcopy(tab)
+  -- taken from Lua user's wiki
+  local tab_type = type(tab)
+  local copy
+  if tab_type == 'table' then
+    copy = {}
+    for tab_key, tab_value in next, tab, nil do
+      copy[deepcopy(tab_key)] = deepcopy(tab_value)
+    end
+    setmetatable(copy, deepcopy(getmetatable(tab)))
+  else -- number, string, boolean, etc
+    copy = tab
+  end
+  return copy
 end
