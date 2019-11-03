@@ -154,7 +154,9 @@ function init()
         midi_out_note[channel] = value end}
     ack.add_channel_params(channel)
 
-    params:add_separator()
+    if channel ~= 4 then
+      params:add_separator()
+    end
 
   end
 
@@ -166,7 +168,6 @@ function init()
   clk.on_select_external = reset_pattern
   clk.on_tick = tick
 
-  clk:add_clock_params()
   -- counter:start()
   blink = 0
   blinker = metro.init()
