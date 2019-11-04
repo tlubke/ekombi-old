@@ -42,10 +42,9 @@
 -- enc2: subdiv. select
 -- enc3: length select
 --
--- key1: save pattern
--- key2: load pattern
+-- key2: discard changes
 -- key3: toggle subdiv. on/off
--- key3: HOLD->PLAY MODE
+-- key3: HOLD->apply changes
 -- ---------------------------------------------
 
 
@@ -98,6 +97,14 @@ for row = 1,8 do
   first[row] = 0
   second[row] = 0
 end
+
+-- encoder variables
+-- for editing/controling without grid
+-- 1-indexed similar for grid and track[]
+local row_select = 1
+local sub_select = 1
+local length_select = 1
+local cursor = {row_select, length_select, sub_select}
 
 -- 4, two-track channels (A is even rows, TrackB is odd rows)
 local track = {}
@@ -186,6 +193,7 @@ function init()
     preview = {}
     redraw()
   end
+
   connect_midi()
   redraw_grid()
   redraw()
@@ -302,21 +310,26 @@ end
 ---------------------------
 -- norns control functions
 ---------------------------
-local row_select = 1 -- 1-indexed, then -1'd later
-local sub_select = 1
-local length_select = 1 -- no track-lengths of 0,
-local cursor = {row_select, length_select, sub_select}
-
 function enc(n,d)
   if n == 1 then
     if mode == "play" then
       params:delta("bpm",d)
     elseif mode == "edit" then
-      row_select = (row_select-1 + d) % 8
+
+      row_select = ((row_select + d) % 8)
+      if row_select == 0 then
+        row_select = 8
+      end
+      -- print("track "..row_select)
+
       length_select = tab.count(buffer[row_select])
-      print("track "..row_select)
-      sub_select = 0
+
+      if sub_select > length_select then
+        sub_select = length_select
+      end
+
       cursor = {row_select, length_select, sub_select}
+
     end
   end
 
@@ -325,11 +338,19 @@ function enc(n,d)
       pattern_select = util.clamp(pattern_select + d, 1, 16)
       preview_pattern()
       peek:start()
-      print("pattern:"..pattern_select)
+      -- print("pattern:"..pattern_select)
     elseif mode == "edit" then
-      sub_select = (sub_select-1 + d) % (length_select)
-      print("sub "..sub_select)
+
+      length_select = tab.count(buffer[row_select])
+
+      sub_select = (sub_select + d) % (length_select)
+      if sub_select == 0 then
+        sub_select = length_select
+      end
+      -- print("sub "..sub_select)
+
       cursor = {row_select, length_select, sub_select}
+
     end
   end
 
@@ -339,10 +360,20 @@ function enc(n,d)
         params:delta(i.."_filter_cutoff", d)
       end
     elseif mode == "edit" then
+
       length_select = ((length_select + d) % 16)
-      if length_select == 0 then length_select = 16 end -- I really didn't want to do this.
-      print("length "..length_select)
+      if length_select == 0 then
+        length_select = 16
+      end
+      -- print("length "..length_select)
+
+      if length_select < sub_select then
+        sub_select = length_select
+      end
+
       cursor = {row_select, length_select, sub_select}
+
+      -- initialize row when length is changed
       buffer[row_select] = {}
       for i = 1, length_select do
         buffer[row_select][i] = {}
@@ -350,6 +381,7 @@ function enc(n,d)
           buffer[row_select][i][j] = 1
         end
       end
+
     end
   end
 
@@ -373,7 +405,9 @@ function key(n,z)
 
     -- enc-1 only functions when held
     if n == 1 then
-      save_pattern()
+      if mode == "play" then
+        save_pattern()
+      end
     end
 
     if n == 2 or n == 3 then
@@ -384,8 +418,10 @@ function key(n,z)
 
     if n == 2 then
       if key_held - util.time() < -0.333 then -- hold for a third of a second
-        load_pattern()
-        pattern_current = pattern_select
+        if mode == "play" then
+          load_pattern()
+          pattern_current = pattern_select
+        end
       else
         discard_changes()
         mode = "play"
