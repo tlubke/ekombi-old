@@ -55,11 +55,6 @@ local ack = require 'ack/lib/ack'
 
 local g = grid.connect()
 
-local BeatClock = require '/home/we/dust/code/ekombi/ebeatclock'
-local clk = BeatClock.new()
-local clk_midi = midi.connect()
-clk_midi.event = clk.process_midi
-
 
 
 ------------
@@ -71,6 +66,7 @@ local mode = "play"
 local position = 0
 local q_position = 0
 local counter = nil
+local ppq = 480
 local running = false
 
 -- midi variables
@@ -138,10 +134,7 @@ end
 function init()
 
   -- parameters
-  clk:add_clock_params()
-
-  params:add_separator()
-
+  params:add_number("bpm", "bpm", 15, 400, 60)
   ack.add_effects_params()
 
   params:add_separator()
@@ -170,10 +163,10 @@ function init()
   params:read("ekombi.pset")
 
   -- metronome setup
-  clk.on_step = step
-  clk.on_select_internal = function() clk:start() end
-  clk.on_select_external = reset_pattern
-  clk.on_tick = tick
+  clk = metro.init()
+  clk.time = 60 / (params:get("bpm") * ppq)
+  clk.count = -1
+  clk.event = tick
 
   -- counter:start()
   blink = 0
@@ -479,17 +472,18 @@ end
     The complicated divisons and multiplations of each of the track sets and subsets is to find the exact position value,
     that when / by that value returns n-1, the track triggers.
 ]]--
-function step()
-  q_position = q_position + 1
-  fast_redraw_grid()
-end
-
 function tick()
   local count = 0
   local pending = {}
-  local ppq = clk.steps_per_beat * clk.ticks_per_step
 
-  position = (position + 1) % ppq
+  clk.time = 60 / (params:get("bpm") * ppq)
+
+  position = (position + 1) % (ppq)
+
+  if position == 0 then
+    q_position = q_position + 1
+    fast_redraw_grid()
+  end
 
   for i=2, 8, 2 do
     count = tab.count(track[i])
@@ -513,9 +507,8 @@ function tick()
             if track[pending[i]][count][n] == 1 then
               t = (pending[i]//2) + 1
               engine.trig(t - 1) -- samples are 0-3
-              all_notes_off(t)
+              -- print(t - 1)
               midi_out_device[t]:note_on(midi_out_note[t], 96, midi_out_channel[t]) -- midi trig
-              table.insert(midi_notes_on[t], {midi_out_note[t], 96, midi_out_channel[t]})
             end
           end
         end
