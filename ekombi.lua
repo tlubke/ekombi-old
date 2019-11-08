@@ -218,7 +218,7 @@ end
 -- grid control functions
 -------------------------
 function g.key(x, y, z)
-  if x ~= 16 and y % 2 ~= 1 then
+  if x ~= 16 and mode == "play" then
     mode = "edit"
     buffer = deepcopy(track)
     blinker:start()
@@ -266,13 +266,9 @@ function gridkey(x,y,z)
         end
       end
 
-      -- automatic clock startup
-      if running == false then
-        restart_clock()
-      end
-
     end
   end
+
   redraw()
   redraw_grid()
 end
