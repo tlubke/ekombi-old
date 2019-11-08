@@ -257,6 +257,8 @@ function gridkey(x,y,z)
         else
           buffer[y][count][x] = 1
         end
+        update_cursor("row", y - row_select)
+        update_cursor("column", x - sub_select)
       end
 
     end
@@ -265,8 +267,6 @@ function gridkey(x,y,z)
   redraw()
   redraw_grid()
 end
-
-
 
 function gridkeyhold(x, y, z)
   if z == 1 and g_held[y] then g_heldMax[y] = 0 end
@@ -304,21 +304,7 @@ function enc(n,d)
     if mode == "play" then
       params:delta("bpm",d)
     elseif mode == "edit" then
-
-      row_select = ((row_select + d) % 8)
-      if row_select == 0 then
-        row_select = 8
-      end
-      -- print("track "..row_select)
-
-      length_select = tab.count(buffer[row_select])
-
-      if sub_select > length_select then
-        sub_select = length_select
-      end
-
-      cursor = {row_select, length_select, sub_select}
-
+      update_cursor("row", d)
     end
   end
 
@@ -329,17 +315,7 @@ function enc(n,d)
       peek:start()
       -- print("pattern:"..pattern_select)
     elseif mode == "edit" then
-
-      length_select = tab.count(buffer[row_select])
-
-      sub_select = (sub_select + d) % (length_select)
-      if sub_select == 0 then
-        sub_select = length_select
-      end
-      -- print("sub "..sub_select)
-
-      cursor = {row_select, length_select, sub_select}
-
+      update_cursor("column", d)
     end
   end
 
@@ -349,43 +325,11 @@ function enc(n,d)
         params:delta(i.."_filter_cutoff", d)
       end
     elseif mode == "edit" then
-
-      length_select = ((length_select + d) % 16)
-      if length_select == 0 then
-        length_select = 16
-      end
-      -- print("length "..length_select)
-
-      if length_select < sub_select then
-        sub_select = length_select
-      end
-
-      cursor = {row_select, length_select, sub_select}
-
-      -- initialize row when length is changed
-      buffer[row_select] = {}
-      for i = 1, length_select do
-        buffer[row_select][i] = {}
-        for j=1, i do
-          buffer[row_select][i][j] = 1
-        end
-      end
-
+      update_cursor("length", d)
     end
   end
 
   redraw()
-end
-
-function discard_changes()
-  print("buffer discarded")
-  buffer = {}
-end
-
-function apply_changes()
-  print("buffer applied")
-  track = buffer
-  buffer = {}
 end
 
 function key(n,z)
@@ -448,19 +392,7 @@ function key(n,z)
   redraw()
 end
 
-function stop_clock()
-  clk:stop()
-  running = false
-  for i=1, 4 do
-    all_notes_off(i)
-  end
-end
 
-function reset_clock()
-  position = 0
-  clk:start()
-  running = true
-end
 
 ------------------
 -- active functions
@@ -523,7 +455,6 @@ end
 ---------------------------
 -- refresh/redraw functions
 ---------------------------
-
 function redraw()
   local display = {}
 
@@ -669,7 +600,7 @@ end
 
 
 
-------------------
+----------------------
 -- save/load functions
 ----------------------
 function save_pattern()
@@ -695,6 +626,87 @@ function preview_pattern()
   else
     preview = {}
   end
+end
+
+
+
+------------------------
+-- convenience functions
+------------------------
+function update_cursor(dimension, delta)
+  -- should only be called in "edit" mode
+  -- because of tab.count on buffer
+
+  -- change selected row (1-8)
+  if dimension == "row" then
+    row_select = (row_select + delta) % 8
+    if row_select == 0 then
+      row_select = 8
+    end
+    print("row "..row_select)
+    length_select = tab.count(buffer[row_select])
+    if sub_select > length_select then
+      sub_select = length_select
+    end
+    cursor = {row_select, length_select, sub_select}
+
+    -- change subdivision amount of selected row
+  elseif dimension == "length" then
+    length_select = ((length_select + delta) % 16)
+    if length_select == 0 then
+      length_select = 16
+    end
+    print("length "..length_select)
+    if length_select < sub_select then
+      sub_select = length_select
+    end
+    cursor = {row_select, length_select, sub_select}
+    -- initialize row when length is changed
+    buffer[row_select] = {}
+    for i = 1, length_select do
+      buffer[row_select][i] = {}
+      for j=1, i do
+        buffer[row_select][i][j] = 1
+      end
+    end
+
+    -- change selected subdivision
+  elseif dimension == "column" then
+    length_select = tab.count(buffer[row_select])
+    sub_select = (sub_select + delta) % (length_select)
+    if sub_select == 0 then
+      sub_select = length_select
+    end
+    print("sub "..sub_select)
+    cursor = {row_select, length_select, sub_select}
+  else
+    return
+  end
+end
+
+function discard_changes()
+  print("buffer discarded")
+  buffer = {}
+end
+
+function apply_changes()
+  print("buffer applied")
+  track = buffer
+  buffer = {}
+end
+
+function stop_clock()
+  clk:stop()
+  running = false
+  for i=1, 4 do
+    all_notes_off(i)
+  end
+end
+
+function reset_clock()
+  position = 0
+  clk:start()
+  running = true
 end
 
 function deepcopy(tab)
