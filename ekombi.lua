@@ -108,6 +108,11 @@ local track = {}
 local preview = {}
 -- build up changes to be pushed to track[]
 local buffer = {}
+-- if channel n is in mute[], it will not be triggered
+-- mute is applied to even-numbered rows to avoid additional
+-- arithmetic in tick(). Counting errors would result from
+-- having .mute inside track[]
+local mute = {[2] = 0, [4] = 0, [6] = 0, [8] = 0}
 
 -- initialize track[]
 for i=1,8 do
@@ -228,6 +233,12 @@ function gridkey(x,y,z)
   local count = 0
 
   if z == 1 then
+    -- mute track
+    if mode == "play" and (x == 16 and y % 2 == 1) then
+      mute[y+1] = ~mute[y+1]
+      return
+    end
+
     count = tab.count(buffer[y])
 
     -- error control
@@ -243,12 +254,6 @@ function gridkey(x,y,z)
       return
 
     else
-      -- mute track-A
-      if x == 16 and y % 2 == 1 then
-        -- mute track[y] = {}
-        return
-      end
-
       -- note toggle on/off
       if x > count then
         return
@@ -380,7 +385,7 @@ function key(n,z)
           mode = "play"
           blinker:stop()
         end
-        print("mode "..mode)
+        -- print("mode "..mode)
       else
         if mode == "play" then
           if running then
@@ -429,7 +434,7 @@ function tick()
     if count == 0 or count == nil then
       return
     else
-      if track[i][count][(q_position % count)+1] == 1 then
+      if mute[i] == 0 and track[i][count][(q_position % count)+1] == 1then
         table.insert(pending,i-1)
       end
     end
@@ -614,16 +619,16 @@ end
 ----------------------
 function save_pattern()
   tab.save(track, norns.state.data .. "pattern-" .. pattern_select .. ".data")
-  print("SAVE COMPLETE")
+  -- print("SAVE COMPLETE")
 end
 
 function load_pattern()
   local temp = tab.load(norns.state.data .. "pattern-".. pattern_select .. ".data")
   if temp then
     track = temp
-    print("LOAD COMPLETE")
+    -- print("LOAD COMPLETE")
   else
-    print("LOAD FAILED: pattern doesn't exist")
+    -- print("LOAD FAILED: pattern doesn't exist")
   end
 end
 
@@ -631,7 +636,7 @@ function preview_pattern()
   local temp = tab.load(norns.state.data .. "pattern-".. pattern_select .. ".data")
   if temp then
     preview = temp
-    print("preview exists")
+    -- print("preview exists")
   else
     preview = {}
   end
@@ -656,17 +661,17 @@ function update_cursor(dimension, delta)
     if row_select == 0 then
       row_select = 8
     end
-    print("row "..row_select)
+    -- print("row "..row_select)
     length_select = tab.count(buffer[row_select])
     if sub_select > length_select then
       sub_select = length_select
     end
     cursor = {row_select, length_select, sub_select}
 
-    -- change subdivision amount of selected row
+  -- change subdivision amount of selected row
   elseif dimension == "length" then
     length_select = util.clamp((length_select + delta), 1, max_length)
-    print("length "..length_select)
+    -- print("length "..length_select)
     if length_select < sub_select then
       sub_select = length_select
     end
@@ -680,14 +685,14 @@ function update_cursor(dimension, delta)
       end
     end
 
-    -- change selected subdivision
+  -- change selected subdivision
   elseif dimension == "column" then
     length_select = tab.count(buffer[row_select])
     sub_select = (sub_select + delta) % (length_select)
     if sub_select == 0 then
       sub_select = length_select
     end
-    print("sub "..sub_select)
+    -- print("sub "..sub_select)
     cursor = {row_select, length_select, sub_select}
   else
     return
@@ -695,12 +700,12 @@ function update_cursor(dimension, delta)
 end
 
 function discard_changes()
-  print("buffer discarded")
+  -- print("buffer discarded")
   buffer = {}
 end
 
 function apply_changes()
-  print("buffer applied")
+  -- print("buffer applied")
   track = buffer
   buffer = {}
 end
