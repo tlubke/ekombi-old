@@ -29,11 +29,11 @@
 -- ------------------------------------------
 -- PLAY MODE
 -- enc1: bpm
--- enc2: select pattern
+-- enc2: select preset
 -- enc3: filter cutoff
 --
--- key1: save pattern
--- key2: load pattern
+-- key1: save preset
+-- key2: load preset
 -- key3: stop clock
 -- key3: HOLD->EDIT MODE
 --
@@ -75,9 +75,8 @@ midi_out_channel = {1, 1, 1, 1}
 midi_out_note = {64, 64, 64, 64}
 midi_notes_on = {{},{},{},{}}
 
--- pattern variables
-local pattern_select = 1
-local pattern_current = "default"
+-- preset variables
+local preset_select = 1
 
 -- grid variables
 -- for holding one gridkey and pressing another further right
@@ -193,6 +192,7 @@ function init()
   end
 
   connect_midi()
+  load_preset()
   redraw_grid()
   redraw()
 end
@@ -321,10 +321,10 @@ function enc(n,d)
 
   if n == 2 then
     if mode == "play" then
-      pattern_select = util.clamp(pattern_select + d, 1, 16)
-      preview_pattern()
+      preset_select = util.clamp(preset_select + d, 1, 16)
+      preview_preset()
       peek:start()
-      -- print("pattern:"..pattern_select)
+      -- print("preset:"..preset_select)
     elseif mode == "edit" then
       update_cursor("column", d)
     end
@@ -351,7 +351,7 @@ function key(n,z)
     -- enc-1 only functions when held
     if n == 1 then
       if mode == "play" then
-        save_pattern()
+        save_preset()
       end
     end
 
@@ -364,8 +364,8 @@ function key(n,z)
     if n == 2 then
       if key_held - util.time() < -0.333 then -- hold for a third of a second
         if mode == "play" then
-          load_pattern()
-          pattern_current = pattern_select
+          load_preset()
+          preset_current = preset_select
         end
       else
         discard_changes()
@@ -474,10 +474,11 @@ function redraw()
 
   screen.clear()
   screen.aa(0)
+  screen.font_face(1)
 
   -- decide which pattern to display
   if tab.count(preview) > 0 then
-    screen.level(6)
+    screen.level(8)
     -- previously saved patterns
     display = preview
   else
@@ -515,12 +516,10 @@ function redraw()
     end
   end
 
-  -- param display
+  -- bpm display
   screen.level(15)
   screen.move(0,5)
   screen.text("bpm:"..params:get("bpm"))
-  screen.move(64,5)
-  screen.text_center("pattern:"..pattern_select)
 
   -- pause/play icon
   if not running then
@@ -534,10 +533,16 @@ function redraw()
     screen.fill()
   end
 
-  screen.level(1)
-  -- currently selected pattern
-  screen.move(128,5)
-  screen.text_right(pattern_current)
+  -- selected preset
+  if tab.count(preview) == 0 then
+    screen.level(8)
+  end
+  screen.move(91,5)
+  screen.text("preset:")
+  screen.move_rel(0,1)
+  screen.font_face(2)
+  screen.text(string.format("%02d", preset_select))
+
 
   screen.update()
 end
@@ -617,23 +622,23 @@ end
 ----------------------
 -- save/load functions
 ----------------------
-function save_pattern()
-  tab.save(track, norns.state.data .. "pattern-" .. pattern_select .. ".data")
+function save_preset()
+  tab.save(track, norns.state.data .. "preset-" .. preset_select .. ".data")
   -- print("SAVE COMPLETE")
 end
 
-function load_pattern()
-  local temp = tab.load(norns.state.data .. "pattern-".. pattern_select .. ".data")
+function load_preset()
+  local temp = tab.load(norns.state.data .. "preset-".. preset_select .. ".data")
   if temp then
     track = temp
     -- print("LOAD COMPLETE")
   else
-    -- print("LOAD FAILED: pattern doesn't exist")
+    -- print("LOAD FAILED: preset doesn't exist")
   end
 end
 
-function preview_pattern()
-  local temp = tab.load(norns.state.data .. "pattern-".. pattern_select .. ".data")
+function preview_preset()
+  local temp = tab.load(norns.state.data .. "preset-".. preset_select .. ".data")
   if temp then
     preview = temp
     -- print("preview exists")
