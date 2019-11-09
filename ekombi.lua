@@ -211,7 +211,8 @@ end
 -- grid control functions
 -------------------------
 function g.key(x, y, z)
-  if x ~= 16 and mode == "play" then
+  -- don't enter edit mode if mute-button is hit
+  if mode == "play" and not (x == 16 and y % 2 == 1) then
     mode = "edit"
     buffer = deepcopy(track)
     blinker:start()
@@ -269,6 +270,11 @@ function gridkey(x,y,z)
 end
 
 function gridkeyhold(x, y, z)
+  -- odd numbered tracks should only go to 15
+  if x == 16 and y % 2 == 1 then
+    return
+  end
+
   if z == 1 and g_held[y] then g_heldMax[y] = 0 end
   g_held[y] = g_held[y] + (z*2 -1)
 
@@ -329,6 +335,7 @@ function enc(n,d)
     end
   end
 
+  redraw_grid()
   redraw()
 end
 
@@ -439,8 +446,10 @@ function tick()
             if track[pending[i]][count][n] == 1 then
               t = (pending[i]//2) + 1
               engine.trig(t - 1) -- samples are 0-3
+              all_notes_off(t)
               -- print(t - 1)
               midi_out_device[t]:note_on(midi_out_note[t], 96, midi_out_channel[t]) -- midi trig
+              table.insert(midi_notes_on[t], {midi_out_note[t], 96, midi_out_channel[t]})
             end
           end
         end
@@ -636,6 +645,10 @@ end
 function update_cursor(dimension, delta)
   -- should only be called in "edit" mode
   -- because of tab.count on buffer
+  local max_length = 16
+  if row_select % 2 == 1 then
+    max_length = 15
+  end
 
   -- change selected row (1-8)
   if dimension == "row" then
@@ -652,10 +665,7 @@ function update_cursor(dimension, delta)
 
     -- change subdivision amount of selected row
   elseif dimension == "length" then
-    length_select = ((length_select + delta) % 16)
-    if length_select == 0 then
-      length_select = 16
-    end
+    length_select = util.clamp((length_select + delta), 1, max_length)
     print("length "..length_select)
     if length_select < sub_select then
       sub_select = length_select
