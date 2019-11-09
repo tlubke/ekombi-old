@@ -524,6 +524,14 @@ function redraw()
   screen.move(0,5)
   screen.text("bpm:"..params:get("bpm"))
 
+  -- mute buttons
+  for i=2, 8, 2 do
+    if mute[i] ~= 0 then
+      screen.move(123, 7 + (i - 1) * 7)
+      screen.text("M")
+    end
+  end
+
   -- pause/play icon
   if not running then
     screen.rect(123,57,2,6)
@@ -593,6 +601,15 @@ function redraw_grid()
           g:led((q_position % count) + 1, i, 15)
         end
       end
+    end
+  end
+
+  -- draw mute buttons
+  for i=2, 8, 2 do
+    if mute[i] == 0 then
+      g:led(16, i-1, 4)
+    else
+      g:led(16, i-1, 15)
     end
   end
 
