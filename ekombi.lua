@@ -188,6 +188,7 @@ function init()
   peek.count = 1
   peek.event = function(p)
     preview = {}
+    redraw_grid()
     redraw()
   end
 
@@ -250,6 +251,7 @@ function gridkey(x,y,z)
         buffer[y][x] = {}
         buffer[y][x][x] = 1
         redraw_grid()
+        redraw()
       end
       return
 
@@ -298,6 +300,7 @@ function gridkeyhold(x, y, z)
           buffer[y][i][n] = 1
         end
       end
+      update_cursor("column", second[y] - sub_select)
     end
   end
 
@@ -348,7 +351,7 @@ function key(n,z)
 
   if z == 1 then
 
-    -- enc-1 only functions when held
+    -- key-1 only functions when held
     if n == 1 then
       if mode == "play" then
         save_preset()
@@ -550,13 +553,22 @@ end
 function redraw_grid()
   local count = 0
   local display = {}
+  local offset = 1
 
   g:all(0)
 
-  if mode == "play" then
-    display = track
-  elseif mode == "edit" then
-    display = buffer
+  -- decide which pattern to display
+  if tab.count(preview) > 0 then
+    offset = 2
+    display = preview
+  else
+    if mode == "play" then
+      -- the currently playing pattern
+      display = track
+    elseif mode == "edit" then
+      -- the currently editing pattern
+      display = buffer
+    end
   end
 
   -- draw channels with sub divisions on/off
@@ -567,16 +579,16 @@ function redraw_grid()
       else
         if i % 2 == 1 then
           if display[i][count][n] == 1 then
-            g:led(n, i, 12)
+            g:led(n, i, 12 / offset)
           else
-            g:led(n, i, 4)
+            g:led(n, i, 4 / offset)
           end
 
         elseif i % 2 == 0 then
           if display[i][count][n] == 1 then
-            g:led(n, i, 8)
+            g:led(n, i, 8 / offset)
           else
-            g:led(n, i, 2)
+            g:led(n, i, 2 / offset)
           end
           g:led((q_position % count) + 1, i, 15)
         end
