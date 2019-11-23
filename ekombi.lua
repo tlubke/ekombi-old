@@ -156,6 +156,8 @@ function init()
       min = 0, max = 127, default = 64,
       action = function(value)
         midi_out_note[channel] = value end}
+    params:add{type = "option", id = channel.. "_random", name = channel..": random sample",
+        options = {"off", "on"}}
     ack.add_channel_params(channel)
 
     if channel ~= 4 then
@@ -186,7 +188,7 @@ function init()
   peek = metro.init()
   peek.time = 2
   peek.count = 1
-  peek.event = function(p)
+  peek.event = function(x)
     preview = {}
     redraw_grid()
     redraw()
@@ -455,6 +457,10 @@ function tick()
               t = (pending[i]//2) + 1
               engine.trig(t - 1) -- samples are 0-3
               all_notes_off(t)
+              if params:get(t.."_random") == 2 then
+                -- 1 == "off", 2 == "on"
+                load_random(t)
+              end
               -- print(t - 1)
               midi_out_device[t]:note_on(midi_out_note[t], 96, midi_out_channel[t]) -- midi trig
               table.insert(midi_notes_on[t], {midi_out_note[t], 96, midi_out_channel[t]})
@@ -772,4 +778,35 @@ function deepcopy(tab)
     copy = tab
   end
   return copy
+end
+
+function load_random(track)
+  local files
+  local filename = params:string(track.."_sample")
+  if filename ~= "-" then
+    files = GetSiblings(params:get(track.."_sample"), filename)
+    engine.loadSample(track-1, files[math.random(1, #files)])
+  end
+end
+
+function GetSiblings(file_path, file_name)
+  local dir = string.gsub(file_path, escape(file_name), "")
+  local files = {}
+  local temp = norns.state.data.."files.txt"
+  os.execute('ls -1 '..dir..' > '..temp)
+  local f = io.open(temp)
+  if not f then return files end
+  local k = 1
+  for line in f:lines() do
+    files[k] = dir..line
+    k = k + 1
+  end
+  f:close()
+  return files
+end
+
+function escape (s)
+  s = string.gsub(s, "[%p%c]", function (c)
+    return string.format("%%%s", c) end)
+  return s
 end
