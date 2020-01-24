@@ -425,7 +425,7 @@ function tick()
   local count = 0
   local pending = {}
 
-  clk.time = 60 / (params:get("bpm") * ppq)
+  clk.time = 60 / (param:get("bpm") * ppq)
 
   position = (position + 1) % (ppq)
 
@@ -782,27 +782,13 @@ end
 
 function load_random(track)
   local files
+  local filepath = params:get(track.."_sample")
   local filename = params:string(track.."_sample")
+  local dir = string.gsub(filepath, escape(filename), "")
   if filename ~= "-" then
-    files = GetSiblings(params:get(track.."_sample"), filename)
-    engine.loadSample(track-1, files[math.random(1, #files)])
+    files = util.scandir(dir)
+    engine.loadSample(track-1, dir..files[math.random(1, #files)])
   end
-end
-
-function GetSiblings(file_path, file_name)
-  local dir = string.gsub(file_path, escape(file_name), "")
-  local files = {}
-  local temp = norns.state.data.."files.txt"
-  os.execute('ls -1 '..dir..' > '..temp)
-  local f = io.open(temp)
-  if not f then return files end
-  local k = 1
-  for line in f:lines() do
-    files[k] = dir..line
-    k = k + 1
-  end
-  f:close()
-  return files
 end
 
 function escape (s)
