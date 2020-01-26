@@ -425,7 +425,7 @@ function tick()
   local count = 0
   local pending = {}
 
-  clk.time = 60 / (param:get("bpm") * ppq)
+  clk.time = 60 / (params:get("bpm") * ppq)
 
   position = (position + 1) % (ppq)
 
