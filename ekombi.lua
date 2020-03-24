@@ -107,11 +107,6 @@ local track = {}
 local preview = {}
 -- build up changes to be pushed to track[]
 local buffer = {}
--- if channel n is in mute[], it will not be triggered
--- mute is applied to even-numbered rows to avoid additional
--- arithmetic in tick(). Counting errors would result from
--- having .mute inside track[]
-local mute = {[2] = 0, [4] = 0, [6] = 0, [8] = 0}
 
 -- initialize track[]
 for i=1,8 do
@@ -242,7 +237,9 @@ function gridkey(x,y,z)
   if z == 1 then
     -- mute track
     if mode == "play" and (x == 16 and y % 2 == 1) then
-      mute[y+1] = ~mute[y+1]
+      local tracknum = 1 + (y//2)
+      local mute_state = params:get(tracknum.."_in_mutegroup")
+      params:set(tracknum.."_in_mutegroup", 1 + (mute_state % 2))
       return
     end
 
@@ -443,7 +440,7 @@ function tick()
     if count == 0 or count == nil then
       return
     else
-      if mute[i] == 0 and track[i][count][(q_position % count)+1] == 1 then
+      if params:get((i//2).."_in_mutegroup") == 1 and track[i][count][(q_position % count)+1] == 1 then
         table.insert(pending,i-1)
       end
     end
@@ -537,7 +534,7 @@ function redraw()
 
   -- mute buttons
   for i=2, 8, 2 do
-    if mute[i] ~= 0 then
+    if params:get((i//2).."_in_mutegroup") == 2 then
       screen.move(123, 7 + (i - 1) * 7)
       screen.text("M")
     end
@@ -617,9 +614,11 @@ function redraw_grid()
 
   -- draw mute buttons
   for i=2, 8, 2 do
-    if mute[i] == 0 then
+    if params:get((i//2).."_in_mutegroup") == 1 then
+      -- not muted
       g:led(16, i-1, 4)
     else
+      -- muted
       g:led(16, i-1, 15)
     end
   end
