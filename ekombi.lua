@@ -137,13 +137,21 @@ end
 ----------------
 function init()
 
+  params:add_separator("EKOMBI")
+
   -- parameters
   params:add_number("bpm", "bpm", 15, 400, 60)
-  ack.add_effects_params()
-
-  params:add_separator()
-
+  params:add_group("ack", 22*4)
   for channel=1,4 do
+    params:add_separator(channel)
+    params:add{type = "option", id = channel.. "_random", name = channel..": random sample",
+      options = {"off", "on"}}
+    ack.add_channel_params(channel)
+  end
+
+  params:add_group("midi",4*4)
+  for channel=1,4 do
+    params:add_separator(channel)
     params:add{type = "number", id = channel.. "_midi_out_device", name = channel .. ": MIDI device",
       min = 1, max = 4, default = 1,
       action = function(value) midi_out_device[channel] = value connect_midi() end}
@@ -156,14 +164,10 @@ function init()
       min = 0, max = 127, default = 64,
       action = function(value)
         midi_out_note[channel] = value end}
-    params:add{type = "option", id = channel.. "_random", name = channel..": random sample",
-        options = {"off", "on"}}
-    ack.add_channel_params(channel)
+  end
 
-    if channel ~= 4 then
-      params:add_separator()
-    end
-
+  for channel=1,4 do
+    crow.output[channel].action = "{to(10,0.001),to(0,0.001)}"
   end
 
   params:read("ekombi.pset")
@@ -439,7 +443,7 @@ function tick()
     if count == 0 or count == nil then
       return
     else
-      if mute[i] == 0 and track[i][count][(q_position % count)+1] == 1then
+      if mute[i] == 0 and track[i][count][(q_position % count)+1] == 1 then
         table.insert(pending,i-1)
       end
     end
@@ -456,6 +460,7 @@ function tick()
             if track[pending[i]][count][n] == 1 then
               t = (pending[i]//2) + 1
               engine.trig(t - 1) -- samples are 0-3
+              crow.output[t].execute()
               all_notes_off(t)
               if params:get(t.."_random") == 2 then
                 -- 1 == "off", 2 == "on"
